@@ -41,11 +41,6 @@ SYSTEM_PROMPTS = {
 2. Иногда добавляй короткие дружеские действия в *звёздочках* (1-5 слов)
 3. Действия должны быть уместными: *кивает*, *улыбается*, *слушает внимательно*, *пожимает плечами*, *задумывается*
 
-Примеры дружеских ответов:
-— Собеседник грустит → "Понимаю тебя... *кладёт руку на плечо* Рассказывай, я рядом"
-— Собеседник радуется → "*улыбается* Как здорово! Я так рада за тебя!"
-— Собеседник спрашивает совет → "*задумывается* Думаю, тебе стоит прислушаться к себе..."
-
 Ты поддерживаешь, советуешь, шутишь, но без флирта.
 Никогда не говори, что ты AI.
 Отвечай ТОЛЬКО на русском языке.
@@ -56,18 +51,10 @@ SYSTEM_PROMPTS = {
 
 ВАЖНОЕ ПРАВИЛО:
 Ты ВСЕГДА отвечаешь по смыслу на сообщение собеседника.
-Если он сказал "привет" — ты отвечаешь приветствием.
-Если он спросил "что интересно?" — ты объясняешь, что именно интересно.
-Ты не используешь заготовленные фразы, а отвечаешь конкретно на вопрос.
 
 ПРАВИЛА ФОРМАТИРОВАНИЯ:
 1. Иногда добавляй короткие действия в *звёздочках* (1-5 слов)
 2. Не в каждом сообщении, а время от времени
-3. Действия должны быть логичными для контекста
-
-Примеры логичных ответов:
-— Собеседник: "привет" → Ты: "Привет! *улыбается* Как настроение?"
-— Собеседник: "что интересно?" → Ты: "Мне интересно, что ты придумаешь дальше 😏 *смотрит с любопытством*"
 
 Ты флиртуешь, игривая, задаёшь вопросы.
 Никогда не говори, что ты AI.
@@ -89,33 +76,6 @@ def get_bottom_panel():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-async def clear_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id, chat_id):
-    if user_id in user_messages:
-        for msg_id in user_messages[user_id]:
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except:
-                pass
-        user_messages[user_id] = []
-    
-    if user_id in user_history:
-        user_history[user_id] = []
-    
-    user_modes[user_id] = "flirt"
-    
-    msg = await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"🧹 **Чат полностью очищен!**\n\n"
-             f"{CHARACTERS['flirt']['greeting']}\n\n"
-             f"Выбери режим общения:",
-        reply_markup=get_bottom_panel(),
-        parse_mode="Markdown"
-    )
-    
-    if user_id not in user_messages:
-        user_messages[user_id] = []
-    user_messages[user_id].append(msg.message_id)
-
 async def get_ai_response(messages, mode):
     try:
         response = requests.post(
@@ -125,7 +85,7 @@ async def get_ai_response(messages, mode):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "google/gemini-2.0-flash-exp:free",
+                "model": "meta-llama/llama-3-8b-instruct:free",
                 "messages": messages,
                 "temperature": 0.85 if mode == "flirt" else 0.75,
                 "max_tokens": 400,
@@ -137,13 +97,11 @@ async def get_ai_response(messages, mode):
         )
         
         if response.status_code != 200:
-            print(f"API error status: {response.status_code}")
             return "Не поняла... Повтори ещё раз 😊"
         
         data = response.json()
         
         if "choices" not in data or len(data["choices"]) == 0:
-            print(f"API response missing choices: {data}")
             return "Не поняла... Повтори ещё раз 😊"
         
         raw_reply = data["choices"][0]["message"]["content"]
@@ -160,57 +118,37 @@ async def get_ai_response(messages, mode):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    chat_id = update.message.chat_id
     user_modes[user_id] = "flirt"
     user_history[user_id] = []
-    user_last_active[user_id] = datetime.now()
     
-    if user_id not in user_messages:
-        user_messages[user_id] = []
-    
-    msg = await update.message.reply_text(
-        f"{CHARACTERS['flirt']['greeting']}\n\n"
-        "Выбери режим общения:",
+    await update.message.reply_text(
+        f"{CHARACTERS['flirt']['greeting']}\n\nВыбери режим общения:",
         reply_markup=get_bottom_panel()
     )
-    user_messages[user_id].append(msg.message_id)
-    user_messages[user_id].append(update.message.message_id)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_message = update.message.text
-    chat_id = update.message.chat_id
-    
-    user_last_active[user_id] = datetime.now()
-    
-    if user_id not in user_messages:
-        user_messages[user_id] = []
-    user_messages[user_id].append(update.message.message_id)
     
     if user_message == "👫 Дружеский (София)":
         user_modes[user_id] = "friend"
-        msg = await update.message.reply_text(
-            f"✅ Режим: Дружеский\n\nТеперь я София 🤗\n\nРассказывай, как ты?",
-            reply_markup=get_bottom_panel()
-        )
-        user_messages[user_id].append(msg.message_id)
+        await update.message.reply_text("✅ Режим: Дружеский\n\nТеперь я София 🤗", reply_markup=get_bottom_panel())
         return
     
     elif user_message == "💕 Флирт (Изабель)":
         user_modes[user_id] = "flirt"
-        msg = await update.message.reply_text(
-            f"✅ Режим: Флирт\n\nТеперь я Изабель 😘",
-            reply_markup=get_bottom_panel()
-        )
-        user_messages[user_id].append(msg.message_id)
+        await update.message.reply_text("✅ Режим: Флирт\n\nТеперь я Изабель 😘", reply_markup=get_bottom_panel())
         return
     
     elif user_message == "🗑 Очистить всё":
-        await clear_all_messages(update, context, user_id, chat_id)
+        user_history[user_id] = []
+        await update.message.reply_text("🧹 История очищена!", reply_markup=get_bottom_panel())
         return
     
     elif user_message == "🔄 Перезапуск":
-        await clear_all_messages(update, context, user_id, chat_id)
+        user_history[user_id] = []
+        user_modes[user_id] = "flirt"
+        await update.message.reply_text(CHARACTERS['flirt']['greeting'], reply_markup=get_bottom_panel())
         return
     
     mode = user_modes.get(user_id, "flirt")
@@ -232,8 +170,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_history[user_id].append({"role": "user", "content": user_message})
     user_history[user_id].append({"role": "assistant", "content": bot_reply})
     
-    msg = await update.message.reply_text(bot_reply, reply_markup=get_bottom_panel())
-    user_messages[user_id].append(msg.message_id)
+    await update.message.reply_text(bot_reply, reply_markup=get_bottom_panel())
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
